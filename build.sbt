@@ -6,6 +6,7 @@ ThisBuild / scalaVersion := "2.13.8"
 val doobie = "1.0.0-RC1"
 val http4s = "0.23.13"
 val circe = "0.14.1"
+val fs2 = "3.1.3"
 
 def doobie(artifact: String): ModuleID = "org.tpolecat" %% s"doobie-$artifact" % doobie
 def http4s(artifact: String): ModuleID = "org.http4s"   %% s"http4s-$artifact" % http4s
@@ -36,6 +37,8 @@ lazy val root = (project in file("."))
       http4sCirce,
       circeGeneric,
       circeGenericExtras,
-      circeParser
+      circeParser,
+      "co.fs2"               %% "fs2-core"    % fs2,
+      "org.typelevel" %% "jawn-fs2" % "2.2.0"
     )
   )
