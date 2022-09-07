@@ -25,7 +25,12 @@ object streamings extends IOApp.Simple {
 
   case class Bar(i: Int,s: String)
   object Bar {
-    implicit val fooCodec: Codec[Bar] = deriveCodec
+    implicit val barCodec: Codec[Bar] = deriveCodec
+  }
+
+  case class Baz(i: Int,s: String)
+  object Baz {
+    implicit val barCodec: Codec[Baz] = deriveCodec
   }
 
   val createFoos =
@@ -43,13 +48,25 @@ object streamings extends IOApp.Simple {
           )
        """.update.run
 
-  def insertFoos(asMany: Int) = Update[(Int,String)]("insert into foos (i,s) values (?,?)").updateMany(
+  val createBazz =
+    sql"""
+          create table if not exists bazz(
+            i bigint,
+            s varchar
+          )
+       """.update.run
+
+  def insertInto(table: String)(asMany: Int) = Update[(Int,String)](s"insert into $table (i,s) values (?,?)").updateMany(
     List.range(1,asMany).map(i => i -> s"$i")
   )
 
-  val selectFoosStream = sql"select * from foos".query[Foo].stream
+  def insertBars(asMany: Int) = Update[(Int,String)]("insert into bars (i,s) values (?,?)").updateMany(
+    List.range(1,asMany).map(i => i -> s"$i")
+  )
 
-  def insertBar(bar: Bar) = Update[Bar](s"insert into bars (i,s) values (?, ?)").run(bar)
+  val selectBarsStream = sql"select * from bars".query[Bar].stream
+
+  def insertBaz(baz: Baz) = Update[Baz](s"insert into bazz (i,s) values (?, ?)").run(baz)
 
 
 
@@ -59,21 +76,25 @@ object streamings extends IOApp.Simple {
     val request = Request[IO](GET, uri"/")
 
     val asMany = 10000
-    
+
     (for {
       _ <- Stream.eval(createFoos.transact(transactor))
       _ <- Stream.eval(IO.println("created table foos"))
       _ <- Stream.eval(createBarss.transact(transactor))
       _ <- Stream.eval(IO.println("created table bars"))
-      _ <- Stream.eval(insertFoos(asMany).transact(transactor))
+      _ <- Stream.eval(createBazz.transact(transactor))
+      _ <- Stream.eval(IO.println("created table bazz"))
+      _ <- Stream.eval(insertInto("foos")(asMany).transact(transactor))
       _ <- Stream.eval(IO.println(s"inserted $asMany foos"))
+      _ <- Stream.eval(insertInto("bars")(asMany).transact(transactor))
+      _ <- Stream.eval(IO.println(s"inserted $asMany bars"))
       _ <- client.stream(request).flatMap(_.body.chunks.parseJsonStream).flatMap { json =>
         Stream.eval(json.as[Foo].liftTo[IO].flatMap(foo => IO.println(s"received $foo") *> IO.pure(foo)))
       }.parZipWith(
-        selectFoosStream.transact(transactor)
+        selectBarsStream.transact(transactor).evalTap(bar => IO.println(s"emitting $bar"))
       ) { case (foo1, foo2) =>
-        Bar(foo1.i + foo2.i, s"rec ${foo1.s} ${foo2.s}")
-      }.flatMap(bar => Stream.eval(IO.println(s"inserting $bar") *> insertBar(bar).transact(transactor)))
+        Baz(foo1.i + foo2.i, s"rec ${foo1.s} ${foo2.s}")
+      }.flatMap(baz => Stream.eval(IO.println(s"inserting $baz") *> insertBaz(baz).transact(transactor)))
     } yield ()).compile.drain
   }
 }

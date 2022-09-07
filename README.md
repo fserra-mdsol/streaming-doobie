@@ -7,8 +7,8 @@ Sample project to demonstrate a simple composed stream that looks like the follo
 It simulates an external API (provided by the `server` object) which is queried by an `http4s` `Ember` client.
 
 The Api streams its response to the client, so that the stream of entities (`Foo`s) returned can be composed (zipped)
-with a second stream of the same entities that comes from a local DB, using the streaming capabilities of `doobie`.
-The composed stream then inserts a new entity (`Bar`) derived by each composed entity from the zipped stream, into the same DB.
+with a second stream of entities (`Bar`s) that comes from a local DB, using the streaming capabilities of `doobie`.
+The composed stream then inserts a new entity (`Baz`) derived by each composed entity from the zipped stream, into the same DB.
 
 # Run
 
