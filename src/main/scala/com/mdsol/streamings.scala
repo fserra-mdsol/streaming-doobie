@@ -66,7 +66,7 @@ object streamings extends IOApp.Simple {
 
   val selectBarsStream = sql"select * from bars".query[Bar].stream
 
-  def insertBaz(baz: Baz) = Update[Baz](s"insert into bazz (i,s) values (?, ?)").run(baz)
+  def insertBaz(baz: List[Baz]) = Update[Baz](s"insert into bazz (i,s) values (?, ?)").updateMany(baz)
 
 
 
@@ -75,7 +75,7 @@ object streamings extends IOApp.Simple {
   override def run: IO[Unit] = {
     val request = Request[IO](GET, uri"/")
 
-    val asMany = 10000
+    val asMany = 1053
 
     (for {
       _ <- Stream.eval(createFoos.transact(transactor))
@@ -94,7 +94,10 @@ object streamings extends IOApp.Simple {
         selectBarsStream.transact(transactor).evalTap(bar => IO.println(s"emitting $bar"))
       ) { case (foo1, foo2) =>
         Baz(foo1.i + foo2.i, s"rec ${foo1.s} ${foo2.s}")
-      }.flatMap(baz => Stream.eval(IO.println(s"inserting $baz") *> insertBaz(baz).transact(transactor)))
+      }.chunkN(100).flatMap{ baz =>
+        val list = baz.toList
+        Stream.eval(IO.println(s"************************* inserting ${list.length} Bazs") *> insertBaz(list).transact(transactor))
+      }
     } yield ()).compile.drain
   }
 }
