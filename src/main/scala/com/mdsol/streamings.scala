@@ -75,7 +75,8 @@ object streamings extends IOApp.Simple {
   override def run: IO[Unit] = {
     val request = Request[IO](GET, uri"/")
 
-    val asMany = 1053
+    val asMany1 = 5001
+    val asMany2 = 10001
 
     (for {
       _ <- Stream.eval(createFoos.transact(transactor))
@@ -84,17 +85,17 @@ object streamings extends IOApp.Simple {
       _ <- Stream.eval(IO.println("created table bars"))
       _ <- Stream.eval(createBazz.transact(transactor))
       _ <- Stream.eval(IO.println("created table bazz"))
-      _ <- Stream.eval(insertInto("foos")(asMany).transact(transactor))
-      _ <- Stream.eval(IO.println(s"inserted $asMany foos"))
-      _ <- Stream.eval(insertInto("bars")(asMany).transact(transactor))
-      _ <- Stream.eval(IO.println(s"inserted $asMany bars"))
+      _ <- Stream.eval(insertInto("foos")(asMany1).transact(transactor))
+      _ <- Stream.eval(IO.println(s"inserted $asMany1 foos"))
+      _ <- Stream.eval(insertInto("bars")(asMany2).transact(transactor))
+      _ <- Stream.eval(IO.println(s"inserted $asMany2 bars"))
       _ <- client.stream(request).flatMap(_.body.chunks.parseJsonStream).flatMap { json =>
-        Stream.eval(json.as[Foo].liftTo[IO].flatMap(foo => IO.println(s"received $foo") *> IO.pure(foo)))
-      }.parZipWith(
-        selectBarsStream.transact(transactor).evalTap(bar => IO.println(s"emitting $bar"))
-      ) { case (foo1, foo2) =>
-        Baz(foo1.i + foo2.i, s"rec ${foo1.s} ${foo2.s}")
-      }.chunkN(100).flatMap{ baz =>
+        Stream.eval(json.as[Foo].liftTo[IO].flatMap(foo => (if (foo.i % 1000 == 0) IO.println(s"received $foo") else IO.unit) *> IO.pure(foo)))
+      }.flatMap( foo =>
+        selectBarsStream.transact(transactor)
+                        .map(bar => Baz(foo.i, s"""${foo.s + " " + bar.s}"""))
+                        .evalTap(baz => if (baz.i % 1000 == 0) IO.println(s"emitting $baz") else IO.unit)
+      ).chunkN(10000).flatMap{ baz =>
         val list = baz.toList
         Stream.eval(IO.println(s"************************* inserting ${list.length} Bazs") *> insertBaz(list).transact(transactor))
       }
